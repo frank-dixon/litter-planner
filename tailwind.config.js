@@ -5,14 +5,14 @@ module.exports = {
     extend: {
       colors: {
         paper: {
-          DEFAULT: '#F5F0E8',
-          2: '#EAE3D8',
-          soft: '#FAF7F1',
+          DEFAULT: '#F7F3EC',
+          2: '#EFE8DC',
+          soft: '#FCFAF6',
         },
         ink: {
-          DEFAULT: '#1C1916',
-          soft: '#3F3A35',
-          muted: '#6A635B',
+          DEFAULT: '#2F2A26',
+          soft: '#4A443E',
+          muted: '#7A7268',
         },
         rule: {
           DEFAULT: '#D8D0C4',
@@ -24,8 +24,7 @@ module.exports = {
           soft: '#D7EEEE',
           on: '#FAF7F1',
         },
-        espresso: '#241E1B',
-        amber: {
+                amber: {
           50: '#F7F0E4',
           100: '#F0E4D0',
           400: '#B89255',

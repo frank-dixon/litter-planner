@@ -184,7 +184,7 @@
   function renderFlash() {
     if (!flashMessage) return '';
     return (
-      '<div class="mb-4 rounded-paper border border-teal/30 bg-teal-soft/70 px-4 py-3 text-sm text-ink-soft" role="status">' +
+      '<div class="mb-4 rounded-paper border border-teal/25 bg-teal-soft px-4 py-3 text-sm text-ink-soft" role="status">' +
       escapeHtml(flashMessage) +
       '</div>'
     );
@@ -200,8 +200,8 @@
           tab.id +
           '" class="rounded-full px-3.5 py-1.5 text-sm transition ' +
           (on
-            ? 'bg-teal text-teal-on font-semibold shadow-teal border border-teal'
-            : 'bg-paper-soft text-ink-soft border border-rule hover:border-teal/50 hover:text-ink') +
+            ? 'bg-teal-soft text-teal-deep font-semibold border border-teal/50'
+            : 'bg-paper text-ink-soft border border-rule hover:border-teal/40 hover:text-ink') +
           '">' +
           escapeHtml(tab.label) +
           '</button>'
@@ -223,7 +223,7 @@
     }
     if (days === 0) {
       return (
-        '<span class="inline-flex items-center rounded-full bg-teal text-teal-on px-2 py-0.5 font-mono text-[0.68rem] font-semibold">Due today</span>'
+        '<span class="inline-flex items-center rounded-full bg-teal-soft text-teal-deep px-2 py-0.5 font-mono text-[0.68rem] font-semibold border border-teal/40">Due today</span>'
       );
     }
     return (
@@ -240,7 +240,7 @@
     var body;
     if (!state.animals.length && !state.matings.length) {
       body =
-        '<div class="rounded-paper border border-rule bg-paper-soft p-6 shadow-paper-sm">' +
+        '<div class="rounded-paper border border-rule bg-paper p-6 shadow-paper-sm">' +
         '<p class="text-ink leading-relaxed">This herd is empty. Load the sample herd to walk a nest → kindle → wean → process cycle, or add animals under Herd and plan a mating.</p>' +
         '<div class="mt-4 flex flex-wrap gap-2">' +
         '<button type="button" data-action="load-sample" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Load sample herd</button>' +
@@ -248,7 +248,7 @@
         '</div></div>';
     } else if (!rows.length) {
       body =
-        '<div class="rounded-paper border border-rule bg-paper-soft p-6 shadow-paper-sm">' +
+        '<div class="rounded-paper border border-rule bg-paper p-6 shadow-paper-sm">' +
         '<p class="text-ink leading-relaxed">Nothing is due in the next week. Enjoy the quiet barn day, or plan another mating when you are ready.</p>' +
         '<button type="button" data-tab="mating" class="mt-4 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Plan a mating</button>' +
         '</div>';
@@ -265,7 +265,7 @@
               ? doeName(mating) + ' × ' + buckName(mating)
               : 'Unlinked mating';
             return (
-              '<li class="rounded-paper border border-rule bg-paper-soft p-4 shadow-paper-sm">' +
+              '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
               '<div class="flex flex-wrap items-start justify-between gap-3">' +
               '<div class="min-w-0">' +
               '<p class="font-mono text-[0.65rem] uppercase tracking-widest text-ink-muted">' +
@@ -327,7 +327,7 @@
 
     function card(a) {
       return (
-        '<li class="rounded-paper border border-rule bg-paper-soft p-4 shadow-paper-sm">' +
+        '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
         '<div class="flex flex-wrap items-baseline justify-between gap-2">' +
         '<h3 class="text-base font-semibold text-ink">' +
         escapeHtml(a.name) +
@@ -449,7 +449,7 @@
                 state.settings
               );
               return (
-                '<li class="rounded-paper border border-rule bg-paper-soft p-4">' +
+                '<li class="rounded-paper border border-rule bg-paper p-4">' +
                 '<p class="font-semibold text-ink">' +
                 escapeHtml(doeName(m)) +
                 ' × ' +
@@ -516,7 +516,7 @@
             .map(function (L) {
               var mating = matingById(L.matingId);
               return (
-                '<li class="rounded-paper border border-rule bg-paper-soft p-4 shadow-paper-sm">' +
+                '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
                 '<p class="font-semibold text-ink">' +
                 (mating
                   ? escapeHtml(doeName(mating)) + ' × ' + escapeHtml(buckName(mating))
