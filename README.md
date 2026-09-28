@@ -1,8 +1,18 @@
 # Litter Planner
 
-Practical meat-rabbit kindle / litter planner. Log a mating, get nest → kindle → wean → process chores, keep the herd in `localStorage`. Cream/paper craft UI that sits beside the [progeny colors](https://frank-dixon.github.io/rabbit/) tool — it does **not** rebuild genetics.
+Practical meat-rabbit kindle / litter planner. Log a mating, get nest → kindle → wean → process chores, keep the herd in the browser. Cream/paper craft UI beside the [progeny colors](https://frank-dixon.github.io/rabbit/) tool — it does **not** rebuild genetics.
 
-Phase 1 is local-only. No auth, no PWA, no CSV, and **GitHub Pages is not enabled yet**.
+## Accounts (static / GitHub Pages)
+
+Client-side only — no server:
+
+| Mode | Behavior |
+| ---- | -------- |
+| **Guest** | Editable herd in `localStorage`. Banner nudges you to create an account once animals exist. |
+| **Free account** | Email + password stored on this device (demo-grade hash — not production security). Guest herd migrates into the new account on signup. |
+| **Sample barn** | Fixed demo login `sample@litterplanner.demo` / `sample`. Loads a rich fixture; **all writes are blocked** with a clear toast. |
+
+Session is remembered in `localStorage` or `sessionStorage`. Live site deploys from `main` `/docs`.
 
 ## Open locally
 
@@ -18,8 +28,6 @@ One-shot build (also used before commit):
 npm install
 npm run build
 ```
-
-Open `docs/index.html` directly, or serve the `docs/` folder with any static server.
 
 ## Schedule defaults
 
@@ -37,8 +45,4 @@ If no kindle date is recorded yet, wean and process use the **estimated** kindle
 - Plain HTML + JS (no React / TypeScript)
 - Tailwind CSS 3 → `docs/css/litter-planner.css`
 - esbuild minify of `src/js/*.js` → `docs/js/`
-- `npm run watch` via concurrently (hyphaneural-style)
-
-## Repo
-
-https://github.com/frank-dixon/litter-planner
+- `npm run watch` via concurrently

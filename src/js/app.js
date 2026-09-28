@@ -1,15 +1,17 @@
 /**
  * Litter Planner — cream/paper UI wiring (plain JS, no framework).
- * Tabs: Today · Herd · Plan mating · Litters · Settings
+ * Tabs: Today · Herd · Plan mating · Litters · History · Settings
+ * Modes: guest (editable) · free account · sample barn (read-only)
  */
 (function () {
   'use strict';
 
   var Storage = window.LitterStorage;
   var Schedule = window.LitterSchedule;
+  var Auth = window.LitterAuth;
 
-  if (!Storage || !Schedule) {
-    console.error('[LitterPlanner] storage.js and schedule.js must load first');
+  if (!Storage || !Schedule || !Auth) {
+    console.error('[LitterPlanner] storage.js, schedule.js, and auth.js must load first');
     return;
   }
 
@@ -32,15 +34,43 @@
     { id: 'herd', label: 'Herd' },
     { id: 'mating', label: 'Plan mating' },
     { id: 'litters', label: 'Litters' },
+    { id: 'history', label: 'History' },
     { id: 'settings', label: 'Settings' },
   ];
 
-  var state = Storage.load();
+  var AUTH_VIEWS = { none: 'none', login: 'login', signup: 'signup' };
+
+  var state = Auth.loadActiveHerd();
   var activeTab = 'today';
   var flashMessage = '';
+  var authView = AUTH_VIEWS.none;
+  var authError = '';
+
+  function user() {
+    return Auth.currentUser();
+  }
+
+  function isReadOnly() {
+    return Auth.isSample();
+  }
 
   function persist() {
-    Storage.save(state);
+    var result = Auth.saveActiveHerd(state);
+    if (result && result.ok === false) {
+      setFlash(result.toast || Auth.SAMPLE_READ_ONLY_TOAST);
+      // Reload pristine fixture so UI does not keep phantom edits
+      state = Auth.loadActiveHerd();
+      return false;
+    }
+    return true;
+  }
+
+  function guardWrite(actionFn) {
+    if (isReadOnly()) {
+      setFlash(Auth.SAMPLE_READ_ONLY_TOAST);
+      return;
+    }
+    actionFn();
   }
 
   function animalById(id) {
@@ -111,32 +141,36 @@
   }
 
   function markDone(choreId) {
-    var chore = state.chores.find(function (c) {
-      return c.id === choreId;
+    guardWrite(function () {
+      var chore = state.chores.find(function (c) {
+        return c.id === choreId;
+      });
+      if (!chore) return;
+      chore.done = true;
+      chore.doneAt = Schedule.todayIso();
+      chore.snoozedTo = null;
+      if (!persist()) return;
+      setFlash('Marked "' + (CHORE_LABELS[chore.type] || chore.type) + '" done.');
     });
-    if (!chore) return;
-    chore.done = true;
-    chore.doneAt = Schedule.todayIso();
-    chore.snoozedTo = null;
-    persist();
-    setFlash("Marked \"" + (CHORE_LABELS[chore.type] || chore.type) + "\" done.");
   }
 
   function snoozeOne(choreId) {
-    var chore = state.chores.find(function (c) {
-      return c.id === choreId;
+    guardWrite(function () {
+      var chore = state.chores.find(function (c) {
+        return c.id === choreId;
+      });
+      if (!chore) return;
+      var base = Schedule.effectiveDue(chore) || Schedule.todayIso();
+      chore.snoozedTo = Schedule.addDays(base, 1);
+      if (!persist()) return;
+      setFlash(
+        'Snoozed "' +
+          (CHORE_LABELS[chore.type] || chore.type) +
+          '" to ' +
+          formatDisplayDate(chore.snoozedTo) +
+          '.'
+      );
     });
-    if (!chore) return;
-    var base = Schedule.effectiveDue(chore) || Schedule.todayIso();
-    chore.snoozedTo = Schedule.addDays(base, 1);
-    persist();
-    setFlash(
-      "Snoozed \"" +
-        (CHORE_LABELS[chore.type] || chore.type) +
-        "\" to " +
-        formatDisplayDate(chore.snoozedTo) +
-        "."
-    );
   }
 
   function createMatingChores(mating) {
@@ -190,6 +224,159 @@
     );
   }
 
+  function statusBanner() {
+    var u = user();
+    if (u.mode === 'sample') {
+      var meta = Auth.sampleMeta();
+      return (
+        '<div class="mb-4 rounded-paper border border-teal/30 bg-teal-soft/80 px-4 py-3 text-sm leading-relaxed text-ink-soft" role="status">' +
+        '<strong class="font-semibold text-ink">Browsing the sample barn</strong> (' +
+        escapeHtml(meta.name) +
+        '). This herd is read-only — try the tabs, then create a free account to save your own animals. Demo login: ' +
+        '<span class="font-mono text-[0.8rem]">' +
+        escapeHtml(meta.email) +
+        '</span> / <span class="font-mono text-[0.8rem]">' +
+        escapeHtml(meta.password) +
+        '</span>.' +
+        '</div>'
+      );
+    }
+    if (u.mode === 'account') {
+      return (
+        '<div class="mb-4 rounded-paper border border-rule bg-paper px-4 py-3 text-sm leading-relaxed text-ink-muted" role="status">' +
+        'Signed in as <strong class="font-semibold text-ink">' +
+        escapeHtml(u.email) +
+        '</strong>' +
+        (u.name ? ' (' + escapeHtml(u.name) + ')' : '') +
+        '. Your herd is saved in this browser on this device.' +
+        '</div>'
+      );
+    }
+    var hasAnimals = state.animals.length > 0;
+    return (
+      '<div class="mb-4 rounded-paper border border-amber-400/40 bg-amber-50 px-4 py-3 text-sm leading-relaxed text-ink-soft" role="status">' +
+      '<strong class="font-semibold text-ink">You’re building a guest herd.</strong> Create a free account to keep it on this device.' +
+      (hasAnimals
+        ? ' <button type="button" data-auth="open-signup" class="ml-1 font-semibold text-teal underline-offset-2 hover:underline">Keep this herd — create free account</button>'
+        : ' Start by adding animals under Herd, or <button type="button" data-auth="sample" class="font-semibold text-teal underline-offset-2 hover:underline">try the sample barn</button> first.') +
+      '</div>'
+    );
+  }
+
+  function renderAuthChrome() {
+    var u = user();
+    var buttons = '';
+    if (u.mode === 'guest') {
+      buttons =
+        '<button type="button" data-auth="sample" class="rounded-full bg-teal px-3 py-1.5 text-sm font-semibold text-teal-on shadow-teal">Try the sample barn</button>' +
+        '<button type="button" data-auth="open-login" class="rounded-full border border-rule bg-paper px-3 py-1.5 text-sm text-ink-soft hover:border-teal/50">Log in</button>' +
+        '<button type="button" data-auth="open-signup" class="rounded-full border border-teal/40 bg-teal-soft px-3 py-1.5 text-sm font-medium text-teal-deep">Sign up</button>';
+    } else if (u.mode === 'sample') {
+      buttons =
+        '<button type="button" data-auth="logout" class="rounded-full border border-rule bg-paper px-3 py-1.5 text-sm text-ink-soft hover:border-teal/50">Leave sample · start guest herd</button>' +
+        '<button type="button" data-auth="open-signup" class="rounded-full bg-teal px-3 py-1.5 text-sm font-semibold text-teal-on shadow-teal">Create free account</button>';
+    } else {
+      buttons =
+        '<button type="button" data-auth="logout" class="rounded-full border border-rule bg-paper px-3 py-1.5 text-sm text-ink-soft hover:border-teal/50">Log out</button>';
+    }
+
+    var label =
+      u.mode === 'sample'
+        ? 'Sample barn'
+        : u.mode === 'account'
+          ? escapeHtml(u.email)
+          : 'Guest';
+
+    return (
+      '<div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-paper border border-rule bg-paper px-4 py-3 shadow-paper-sm">' +
+      '<p class="text-sm text-ink-muted">Account status: <span class="font-semibold text-ink">' +
+      label +
+      '</span></p>' +
+      '<div class="flex flex-wrap gap-2">' +
+      buttons +
+      '</div></div>'
+    );
+  }
+
+  function renderAuthPanel() {
+    if (authView === AUTH_VIEWS.none) return '';
+    var meta = Auth.sampleMeta();
+    var err = authError
+      ? '<p class="mb-3 rounded-lg border border-amber-400/50 bg-amber-50 px-3 py-2 text-sm text-amber-600" role="alert">' +
+        escapeHtml(authError) +
+        '</p>'
+      : '';
+
+    if (authView === AUTH_VIEWS.login) {
+      return (
+        '<div class="mb-5 rounded-paper border border-rule bg-paper p-5 shadow-paper-sm" id="auth-panel">' +
+        '<div class="flex flex-wrap items-start justify-between gap-2">' +
+        '<h2 class="text-lg font-semibold text-ink">Log in</h2>' +
+        '<button type="button" data-auth="close" class="text-sm text-ink-muted hover:text-ink">Close</button></div>' +
+        '<p class="mt-1 mb-4 text-sm leading-relaxed text-ink-muted">Sign in to restore a herd saved on this device. Sample barn credentials are shown below.</p>' +
+        err +
+        '<form id="login-form" class="grid gap-3 sm:grid-cols-2">' +
+        '<label class="block text-sm text-ink-soft sm:col-span-2">Email<input type="email" name="email" required autocomplete="username" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="' +
+        escapeHtml(meta.email) +
+        '" /></label>' +
+        '<label class="block text-sm text-ink-soft">Password<input type="password" name="password" required autocomplete="current-password" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<label class="flex items-end gap-2 text-sm text-ink-soft pb-2"><input type="checkbox" name="remember" checked class="rounded border-rule text-teal" /> Remember on this device</label>' +
+        '<div class="sm:col-span-2 flex flex-wrap gap-2">' +
+        '<button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Log in</button>' +
+        '<button type="button" data-auth="sample" class="rounded-full border border-teal/40 bg-teal-soft px-4 py-2 text-sm font-medium text-teal-deep">Try the sample barn</button>' +
+        '<button type="button" data-auth="open-signup" class="rounded-full border border-rule bg-paper-soft px-4 py-2 text-sm text-ink-soft">Need an account? Sign up</button>' +
+        '</div></form>' +
+        '<p class="mt-4 font-mono text-[0.72rem] leading-relaxed text-ink-muted">Sample barn: ' +
+        escapeHtml(meta.email) +
+        ' / ' +
+        escapeHtml(meta.password) +
+        '</p></div>'
+      );
+    }
+
+    // signup
+    var herdHint = state.animals.length
+      ? 'Your current guest herd (' +
+        state.animals.length +
+        ' animal' +
+        (state.animals.length === 1 ? '' : 's') +
+        ') will move into the new account.'
+      : 'You can sign up now with an empty herd, then add animals — or build a guest herd first and use “Keep this herd”.';
+
+    return (
+      '<div class="mb-5 rounded-paper border border-rule bg-paper p-5 shadow-paper-sm" id="auth-panel">' +
+      '<div class="flex flex-wrap items-start justify-between gap-2">' +
+      '<h2 class="text-lg font-semibold text-ink">Create a free account</h2>' +
+      '<button type="button" data-auth="close" class="text-sm text-ink-muted hover:text-ink">Close</button></div>' +
+      '<p class="mt-1 mb-4 text-sm leading-relaxed text-ink-muted">' +
+      escapeHtml(herdHint) +
+      ' Accounts stay in this browser only (portfolio demo — not production security).</p>' +
+      err +
+      '<form id="signup-form" class="grid gap-3 sm:grid-cols-2">' +
+      '<label class="block text-sm text-ink-soft sm:col-span-2">Email<input type="email" name="email" required autocomplete="username" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="you@example.com" /></label>' +
+      '<label class="block text-sm text-ink-soft">Password<input type="password" name="password" required minlength="4" autocomplete="new-password" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+      '<label class="block text-sm text-ink-soft">Name <span class="text-ink-muted">(optional)</span><input type="text" name="name" autocomplete="name" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Barn name or yours" /></label>' +
+      '<div class="sm:col-span-2 flex flex-wrap gap-2">' +
+      '<button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Create account &amp; save herd</button>' +
+      '<button type="button" data-auth="open-login" class="rounded-full border border-rule bg-paper-soft px-4 py-2 text-sm text-ink-soft">Already have an account?</button>' +
+      '</div></form></div>'
+    );
+  }
+
+  function writeDisabledAttr() {
+    return isReadOnly() ? ' disabled aria-disabled="true" title="Sample barn is read-only"' : '';
+  }
+
+  function writeBtnClass(extra) {
+    if (isReadOnly()) {
+      return (
+        (extra || '') +
+        ' opacity-50 cursor-not-allowed'
+      ).trim();
+    }
+    return extra || '';
+  }
+
   function renderTabs() {
     return (
       '<nav class="mb-6 flex flex-wrap gap-2 border-b border-rule pb-3" aria-label="Litter Planner sections">' +
@@ -241,16 +428,18 @@
     if (!state.animals.length && !state.matings.length) {
       body =
         '<div class="rounded-paper border border-rule bg-paper p-6 shadow-paper-sm">' +
-        '<p class="text-ink leading-relaxed">This herd is empty. Load the sample herd to walk a nest → kindle → wean → process cycle, or add animals under Herd and plan a mating.</p>' +
+        '<p class="text-ink leading-relaxed">This herd is empty. Try the sample barn to walk a lived-in nest → kindle → wean → process cycle, or add animals under Herd and plan a mating.</p>' +
         '<div class="mt-4 flex flex-wrap gap-2">' +
-        '<button type="button" data-action="load-sample" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Load sample herd</button>' +
+        '<button type="button" data-auth="sample" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Try the sample barn</button>' +
         '<button type="button" data-tab="herd" class="rounded-full border border-rule bg-paper px-4 py-2 text-sm text-ink-soft hover:border-teal/50">Go to Herd</button>' +
         '</div></div>';
     } else if (!rows.length) {
       body =
         '<div class="rounded-paper border border-rule bg-paper p-6 shadow-paper-sm">' +
         '<p class="text-ink leading-relaxed">Nothing is due in the next week. Enjoy the quiet barn day, or plan another mating when you are ready.</p>' +
-        '<button type="button" data-tab="mating" class="mt-4 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Plan a mating</button>' +
+        (isReadOnly()
+          ? ''
+          : '<button type="button" data-tab="mating" class="mt-4 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Plan a mating</button>') +
         '</div>';
     } else {
       body =
@@ -264,6 +453,23 @@
             var who = mating
               ? doeName(mating) + ' × ' + buckName(mating)
               : 'Unlinked mating';
+            var actions = isReadOnly()
+              ? '<p class="text-xs text-ink-muted max-w-[12rem]">Browse only in the sample barn.</p>'
+              : '<button type="button" data-action="done" data-id="' +
+                escapeHtml(c.id) +
+                '" class="' +
+                writeBtnClass(
+                  'rounded-full bg-teal px-3 py-1.5 text-sm font-semibold text-teal-on shadow-teal'
+                ) +
+                '">Mark done</button>' +
+                '<button type="button" data-action="snooze" data-id="' +
+                escapeHtml(c.id) +
+                '" class="rounded-full border border-rule bg-paper px-3 py-1.5 text-sm text-ink-soft hover:border-teal/50">Snooze +1 day</button>' +
+                (c.type === 'kindle'
+                  ? '<button type="button" data-action="record-litter" data-mating="' +
+                    escapeHtml(c.matingId) +
+                    '" class="rounded-full border border-teal/40 bg-teal-soft px-3 py-1.5 text-sm font-medium text-teal-deep">Record litter</button>'
+                  : '');
             return (
               '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
               '<div class="flex flex-wrap items-start justify-between gap-3">' +
@@ -287,17 +493,7 @@
               '</div>' +
               '</div>' +
               '<div class="flex flex-wrap gap-2 shrink-0">' +
-              '<button type="button" data-action="done" data-id="' +
-              escapeHtml(c.id) +
-              '" class="rounded-full bg-teal px-3 py-1.5 text-sm font-semibold text-teal-on shadow-teal">Mark done</button>' +
-              '<button type="button" data-action="snooze" data-id="' +
-              escapeHtml(c.id) +
-              '" class="rounded-full border border-rule bg-paper px-3 py-1.5 text-sm text-ink-soft hover:border-teal/50">Snooze +1 day</button>' +
-              (c.type === 'kindle'
-                ? '<button type="button" data-action="record-litter" data-mating="' +
-                  escapeHtml(c.matingId) +
-                  '" class="rounded-full border border-teal/40 bg-teal-soft px-3 py-1.5 text-sm font-medium text-teal-deep">Record litter</button>'
-                : '') +
+              actions +
               '</div></div></li>'
             );
           })
@@ -363,37 +559,42 @@
     var empty =
       !state.animals.length
         ? '<div class="rounded-paper border border-dashed border-rule bg-paper-soft/60 p-6">' +
-          '<p class="text-sm leading-relaxed text-ink-soft">No animals yet. Load the sample herd to explore the planner, or add a doe and buck below.</p>' +
-          '<button type="button" data-action="load-sample" class="mt-4 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Load sample herd</button>' +
+          '<p class="text-sm leading-relaxed text-ink-soft">No animals yet. Try the sample barn to explore a lived-in herd, or add a doe and buck below.</p>' +
+          '<button type="button" data-auth="sample" class="mt-4 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Try the sample barn</button>' +
           '</div>'
         : '';
+
+    var addForm = isReadOnly()
+      ? '<div class="mt-2 rounded-paper border border-dashed border-rule bg-paper-soft/60 p-5"><p class="text-sm leading-relaxed text-ink-muted">Adding animals is disabled in the sample barn. Create a free account (or leave sample for a guest herd) to build your own.</p></div>'
+      : '<div class="mt-2 rounded-paper border border-rule bg-paper p-5 shadow-paper-sm">' +
+        '<h3 class="text-base font-semibold text-ink">Add an animal</h3>' +
+        '<p class="mt-1 mb-4 text-sm text-ink-muted">Name and sex are enough to plan a mating. Breed and cage are optional notes.</p>' +
+        '<form id="add-animal-form" class="grid gap-3 sm:grid-cols-2">' +
+        '<label class="block text-sm text-ink-soft">Name' +
+        '<input name="name" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Clover" /></label>' +
+        '<label class="block text-sm text-ink-soft">Sex' +
+        '<select name="sex" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
+        '<option value="doe">Doe</option><option value="buck">Buck</option><option value="grow-out">Grow-out</option>' +
+        '</select></label>' +
+        '<label class="block text-sm text-ink-soft">Breed' +
+        '<input name="breed" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="New Zealand White" /></label>' +
+        '<label class="block text-sm text-ink-soft">Cage / location' +
+        '<input name="cage" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="A1" /></label>' +
+        '<label class="block text-sm text-ink-soft sm:col-span-2">Notes' +
+        '<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Optional" /></label>' +
+        '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Save animal</button></div>' +
+        '</form></div>';
 
     return (
       '<section aria-labelledby="herd-heading">' +
       '<h2 id="herd-heading" class="text-xl font-semibold text-ink">Herd</h2>' +
-      '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Does, bucks, and grow-outs living in this local planner. Everything stays on this device.</p>' +
+      '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Does, bucks, and grow-outs in this planner. Guest and free-account herds stay on this device.</p>' +
       empty +
       group('Does', does) +
       group('Bucks', bucks) +
       group('Grow-outs & others', others) +
-      '<div class="mt-2 rounded-paper border border-rule bg-paper p-5 shadow-paper-sm">' +
-      '<h3 class="text-base font-semibold text-ink">Add an animal</h3>' +
-      '<p class="mt-1 mb-4 text-sm text-ink-muted">Name and sex are enough to plan a mating. Breed and cage are optional notes.</p>' +
-      '<form id="add-animal-form" class="grid gap-3 sm:grid-cols-2">' +
-      '<label class="block text-sm text-ink-soft">Name' +
-      '<input name="name" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Clover" /></label>' +
-      '<label class="block text-sm text-ink-soft">Sex' +
-      '<select name="sex" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
-      '<option value="doe">Doe</option><option value="buck">Buck</option><option value="grow-out">Grow-out</option>' +
-      '</select></label>' +
-      '<label class="block text-sm text-ink-soft">Breed' +
-      '<input name="breed" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="New Zealand White" /></label>' +
-      '<label class="block text-sm text-ink-soft">Cage / location' +
-      '<input name="cage" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="A1" /></label>' +
-      '<label class="block text-sm text-ink-soft sm:col-span-2">Notes' +
-      '<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Optional" /></label>' +
-      '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Save animal</button></div>' +
-      '</form></div></section>'
+      addForm +
+      '</section>'
     );
   }
 
@@ -461,6 +662,11 @@
                   ? ' · kindled ' + escapeHtml(formatDisplayDate(m.kindleDate))
                   : '') +
                 '</p>' +
+                (m.notes
+                  ? '<p class="mt-2 text-sm leading-relaxed text-ink-soft">' +
+                    escapeHtml(m.notes) +
+                    '</p>'
+                  : '') +
                 '<p class="mt-2 font-mono text-[0.68rem] leading-relaxed text-ink-muted">' +
                 chain
                   .map(function (c) {
@@ -477,26 +683,30 @@
             .join('') +
           '</ul>';
 
+    var formBlock = isReadOnly()
+      ? '<div class="rounded-paper border border-dashed border-rule bg-paper-soft/60 p-5 mb-8"><p class="text-sm leading-relaxed text-ink-muted">Planning new matings is disabled in the sample barn. Browse the recent matings below, then create a free account to schedule your own.</p></div>'
+      : '<div class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm mb-8">' +
+        '<form id="plan-mating-form" class="grid gap-3 sm:grid-cols-2">' +
+        '<label class="block text-sm text-ink-soft">Doe<select name="doeId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
+        doeOpts +
+        '</select></label>' +
+        '<label class="block text-sm text-ink-soft">Buck<select name="buckId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
+        buckOpts +
+        '</select></label>' +
+        '<label class="block text-sm text-ink-soft">Mating date<input type="date" name="date" required value="' +
+        escapeHtml(today) +
+        '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<label class="block text-sm text-ink-soft">Notes<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Observed, planned, …" /></label>' +
+        '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal" ' +
+        (!does.length || !bucks.length ? 'disabled' : '') +
+        '>Save mating &amp; build schedule</button></div>' +
+        '</form></div>';
+
     return (
       '<section aria-labelledby="mating-heading">' +
       '<h2 id="mating-heading" class="text-xl font-semibold text-ink">Plan mating</h2>' +
       '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Log a doe, buck, and date. The planner builds nest, kindle, wean, and process chores from your Settings offsets.</p>' +
-      '<div class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm mb-8">' +
-      '<form id="plan-mating-form" class="grid gap-3 sm:grid-cols-2">' +
-      '<label class="block text-sm text-ink-soft">Doe<select name="doeId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
-      doeOpts +
-      '</select></label>' +
-      '<label class="block text-sm text-ink-soft">Buck<select name="buckId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
-      buckOpts +
-      '</select></label>' +
-      '<label class="block text-sm text-ink-soft">Mating date<input type="date" name="date" required value="' +
-      escapeHtml(today) +
-      '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
-      '<label class="block text-sm text-ink-soft">Notes<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="Observed, planned, …" /></label>' +
-      '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal" ' +
-      (!does.length || !bucks.length ? 'disabled' : '') +
-      '>Save mating &amp; build schedule</button></div>' +
-      '</form></div>' +
+      formBlock +
       '<h3 class="mb-3 font-mono text-[0.7rem] uppercase tracking-widest text-ink-muted">Recent matings</h3>' +
       recent +
       '</section>'
@@ -519,7 +729,9 @@
                 '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
                 '<p class="font-semibold text-ink">' +
                 (mating
-                  ? escapeHtml(doeName(mating)) + ' × ' + escapeHtml(buckName(mating))
+                  ? escapeHtml(doeName(mating)) +
+                    ' × ' +
+                    escapeHtml(buckName(mating))
                   : 'Litter') +
                 '</p>' +
                 '<p class="mt-1 text-sm text-ink-muted">Kindled ' +
@@ -560,49 +772,111 @@
       })
       .join('');
 
+    var formBlock = isReadOnly()
+      ? '<div class="rounded-paper border border-dashed border-rule bg-paper-soft/60 p-5"><p class="text-sm leading-relaxed text-ink-muted">Recording litters is disabled in the sample barn. Browse the litters above, then save your own herd with a free account.</p></div>'
+      : '<div class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm">' +
+        '<h3 class="text-base font-semibold text-ink">Record a litter</h3>' +
+        '<form id="record-litter-form" class="mt-4 grid gap-3 sm:grid-cols-2">' +
+        '<label class="block text-sm text-ink-soft sm:col-span-2">Mating<select name="matingId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
+        (matingOpts || '<option value="">Plan a mating first</option>') +
+        '</select></label>' +
+        '<label class="block text-sm text-ink-soft">Kindle date<input type="date" name="date" required value="' +
+        escapeHtml(Schedule.todayIso()) +
+        '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<label class="block text-sm text-ink-soft">Born alive<input type="number" name="bornAlive" min="0" value="8" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<label class="block text-sm text-ink-soft">Stillborn<input type="number" name="stillborn" min="0" value="0" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<label class="block text-sm text-ink-soft">Notes<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
+        '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal" ' +
+        (!state.matings.length ? 'disabled' : '') +
+        '>Save litter</button></div>' +
+        '</form></div>';
+
     return (
       '<section aria-labelledby="litters-heading">' +
       '<h2 id="litters-heading" class="text-xl font-semibold text-ink">Litters</h2>' +
       '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Record born-alive and stillborn counts against a mating. That stamps the kindle date and shifts wean and process chores.</p>' +
       list +
-      '<div class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm">' +
-      '<h3 class="text-base font-semibold text-ink">Record a litter</h3>' +
-      '<form id="record-litter-form" class="mt-4 grid gap-3 sm:grid-cols-2">' +
-      '<label class="block text-sm text-ink-soft sm:col-span-2">Mating<select name="matingId" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink">' +
-      (matingOpts || '<option value="">Plan a mating first</option>') +
-      '</select></label>' +
-      '<label class="block text-sm text-ink-soft">Kindle date<input type="date" name="date" required value="' +
-      escapeHtml(Schedule.todayIso()) +
-      '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
-      '<label class="block text-sm text-ink-soft">Born alive<input type="number" name="bornAlive" min="0" value="8" required class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
-      '<label class="block text-sm text-ink-soft">Stillborn<input type="number" name="stillborn" min="0" value="0" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
-      '<label class="block text-sm text-ink-soft">Notes<input name="notes" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" /></label>' +
-      '<div class="sm:col-span-2"><button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal" ' +
-      (!state.matings.length ? 'disabled' : '') +
-      '>Save litter</button></div>' +
-      '</form></div></section>'
+      formBlock +
+      '</section>'
+    );
+  }
+
+  function renderHistory() {
+    var notes = Array.isArray(state.historyNotes) ? state.historyNotes.slice() : [];
+    notes.sort(function (a, b) {
+      return a.date < b.date ? 1 : -1;
+    });
+
+    var doneChores = state.chores
+      .filter(function (c) {
+        return c.done;
+      })
+      .slice()
+      .sort(function (a, b) {
+        var da = a.doneAt || a.dueDate || '';
+        var db = b.doneAt || b.dueDate || '';
+        return da < db ? 1 : -1;
+      });
+
+    var notesBlock =
+      notes.length === 0
+        ? '<p class="text-sm text-ink-muted mb-6">No barn notes yet.</p>'
+        : '<ul class="space-y-3 mb-8">' +
+          notes
+            .map(function (n) {
+              return (
+                '<li class="rounded-paper border border-rule bg-paper p-4 shadow-paper-sm">' +
+                '<p class="font-mono text-[0.68rem] text-ink-muted">' +
+                escapeHtml(formatDisplayDate(n.date)) +
+                '</p>' +
+                '<p class="mt-1 text-sm leading-relaxed text-ink-soft">' +
+                escapeHtml(n.text) +
+                '</p></li>'
+              );
+            })
+            .join('') +
+          '</ul>';
+
+    var choresBlock =
+      doneChores.length === 0
+        ? '<p class="text-sm text-ink-muted">No completed chores yet.</p>'
+        : '<ul class="space-y-2">' +
+          doneChores
+            .slice(0, 20)
+            .map(function (c) {
+              var mating = matingById(c.matingId);
+              var who = mating
+                ? doeName(mating) + ' × ' + buckName(mating)
+                : 'Unlinked';
+              return (
+                '<li class="rounded-lg border border-rule/70 bg-paper-soft px-3 py-2 text-sm text-ink-soft">' +
+                '<span class="font-medium text-ink">' +
+                escapeHtml(CHORE_LABELS[c.type] || c.type) +
+                '</span> · ' +
+                escapeHtml(who) +
+                ' · done ' +
+                escapeHtml(formatDisplayDate(c.doneAt || c.dueDate)) +
+                '</li>'
+              );
+            })
+            .join('') +
+          '</ul>';
+
+    return (
+      '<section aria-labelledby="history-heading">' +
+      '<h2 id="history-heading" class="text-xl font-semibold text-ink">History</h2>' +
+      '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Barn notes and completed chores for this herd. Browse freely in the sample barn; edits stay with guest and free accounts.</p>' +
+      '<h3 class="mb-3 font-mono text-[0.7rem] uppercase tracking-widest text-ink-muted">Barn notes</h3>' +
+      notesBlock +
+      '<h3 class="mb-3 font-mono text-[0.7rem] uppercase tracking-widest text-ink-muted">Completed chores</h3>' +
+      choresBlock +
+      '</section>'
     );
   }
 
   function renderSettings() {
     var s = state.settings;
-    return (
-      '<section aria-labelledby="settings-heading">' +
-      '<h2 id="settings-heading" class="text-xl font-semibold text-ink">Settings</h2>' +
-      '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Tune the day offsets for this herd. Nest and kindle count from the mating date; wean and process count from the recorded kindle date, or the estimated kindle when none is recorded yet.</p>' +
-      '<form id="settings-form" class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm grid gap-4 sm:grid-cols-2">' +
-      field('nestOffsetDays', 'Nest box days after mating', s.nestOffsetDays, 'Default 27.') +
-      field('kindleOffsetDays', 'Kindle days after mating', s.kindleOffsetDays, 'Default 31.') +
-      field('weanDaysAfterKindle', 'Wean days after kindle', s.weanDaysAfterKindle, 'Default 28.') +
-      field('processDaysAfterKindle', 'Process days after kindle', s.processDaysAfterKindle, 'Default 75.') +
-      '<div class="sm:col-span-2 flex flex-wrap gap-2 pt-2">' +
-      '<button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Save offsets</button>' +
-      '<button type="button" data-action="load-sample" class="rounded-full border border-rule bg-paper-soft px-4 py-2 text-sm text-ink-soft hover:border-teal/50">Reload sample herd</button>' +
-      '<button type="button" data-action="clear-all" class="rounded-full border border-amber-400/50 bg-amber-50 px-4 py-2 text-sm text-amber-600">Clear all local data</button>' +
-      '</div></form>' +
-      '<p class="mt-6 text-sm leading-relaxed text-ink-muted">Data never leaves this browser. There is no account and no cloud sync in Phase 1. Pair this planner with <a class="text-teal font-medium underline-offset-2 hover:underline" href="https://frank-dixon.github.io/rabbit/">Progeny colors</a> when you want coat predictions for a planned cross.</p>' +
-      '</section>'
-    );
+    var formDisabled = isReadOnly();
 
     function field(name, label, value, hint) {
       return (
@@ -612,12 +886,51 @@
         name +
         '" min="1" max="200" required value="' +
         Number(value) +
-        '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink font-mono" />' +
+        '" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink font-mono" ' +
+        (formDisabled ? 'disabled' : '') +
+        ' />' +
         '<span class="mt-1 block text-xs text-ink-muted">' +
         escapeHtml(hint) +
         '</span></label>'
       );
     }
+
+    var actions = formDisabled
+      ? '<p class="sm:col-span-2 text-sm leading-relaxed text-ink-muted">Settings writes are disabled in the sample barn. Leave the sample or create a free account to tune offsets for your own herd.</p>'
+      : '<div class="sm:col-span-2 flex flex-wrap gap-2 pt-2">' +
+        '<button type="submit" class="rounded-full bg-teal px-4 py-2 text-sm font-semibold text-teal-on shadow-teal">Save offsets</button>' +
+        '<button type="button" data-action="clear-all" class="rounded-full border border-amber-400/50 bg-amber-50 px-4 py-2 text-sm text-amber-600">Clear this herd’s local data</button>' +
+        '</div>';
+
+    return (
+      '<section aria-labelledby="settings-heading">' +
+      '<h2 id="settings-heading" class="text-xl font-semibold text-ink">Settings</h2>' +
+      '<p class="mt-1 mb-5 max-w-2xl text-sm leading-relaxed text-ink-muted">Tune the day offsets for this herd. Nest and kindle count from the mating date; wean and process count from the recorded kindle date, or the estimated kindle when none is recorded yet.</p>' +
+      '<form id="settings-form" class="rounded-paper border border-rule bg-paper p-5 shadow-paper-sm grid gap-4 sm:grid-cols-2">' +
+      field('nestOffsetDays', 'Nest box days after mating', s.nestOffsetDays, 'Default 27.') +
+      field(
+        'kindleOffsetDays',
+        'Kindle days after mating',
+        s.kindleOffsetDays,
+        'Default 31.'
+      ) +
+      field(
+        'weanDaysAfterKindle',
+        'Wean days after kindle',
+        s.weanDaysAfterKindle,
+        'Default 28.'
+      ) +
+      field(
+        'processDaysAfterKindle',
+        'Process days after kindle',
+        s.processDaysAfterKindle,
+        'Default 75.'
+      ) +
+      actions +
+      '</form>' +
+      '<p class="mt-6 text-sm leading-relaxed text-ink-muted">Free accounts and guest herds stay in this browser on this device. Sample barn data is a built-in fixture and never saves. Pair this planner with <a class="text-teal font-medium underline-offset-2 hover:underline" href="https://frank-dixon.github.io/rabbit/">Progeny colors</a> when you want coat predictions for a planned cross.</p>' +
+      '</section>'
+    );
   }
 
   function render() {
@@ -628,58 +941,185 @@
     else if (activeTab === 'herd') panel = renderHerd();
     else if (activeTab === 'mating') panel = renderMating();
     else if (activeTab === 'litters') panel = renderLitters();
+    else if (activeTab === 'history') panel = renderHistory();
     else if (activeTab === 'settings') panel = renderSettings();
 
-    root.innerHTML = renderFlash() + renderTabs() + panel;
+    root.innerHTML =
+      renderAuthChrome() +
+      statusBanner() +
+      renderAuthPanel() +
+      renderFlash() +
+      renderTabs() +
+      panel;
     bind();
   }
 
   function recordLitterFromForm(form) {
-    var fd = new FormData(form);
-    var matingId = String(fd.get('matingId') || '');
-    var mating = matingById(matingId);
-    if (!mating) {
-      setFlash('Choose a mating before recording a litter.');
-      return;
-    }
-    var date = String(fd.get('date') || Schedule.todayIso());
-    var litter = {
-      id: Storage.uid('litter'),
-      matingId: matingId,
-      date: date,
-      bornAlive: Number(fd.get('bornAlive') || 0),
-      stillborn: Number(fd.get('stillborn') || 0),
-      notes: String(fd.get('notes') || '').trim(),
-    };
-    state.litters.push(litter);
-    mating.kindleDate = date;
+    guardWrite(function () {
+      var fd = new FormData(form);
+      var matingId = String(fd.get('matingId') || '');
+      var mating = matingById(matingId);
+      if (!mating) {
+        setFlash('Choose a mating before recording a litter.');
+        return;
+      }
+      var date = String(fd.get('date') || Schedule.todayIso());
+      var litter = {
+        id: Storage.uid('litter'),
+        matingId: matingId,
+        date: date,
+        bornAlive: Number(fd.get('bornAlive') || 0),
+        stillborn: Number(fd.get('stillborn') || 0),
+        notes: String(fd.get('notes') || '').trim(),
+      };
+      state.litters.push(litter);
+      mating.kindleDate = date;
 
-    var kindleChore = state.chores.find(function (c) {
-      return c.matingId === matingId && c.type === 'kindle' && !c.done;
+      var kindleChore = state.chores.find(function (c) {
+        return c.matingId === matingId && c.type === 'kindle' && !c.done;
+      });
+      if (kindleChore) {
+        kindleChore.done = true;
+        kindleChore.doneAt = date;
+        kindleChore.snoozedTo = null;
+      }
+
+      refreshOpenChoresForMating(matingId);
+      if (!persist()) return;
+      activeTab = 'litters';
+      setFlash(
+        'Recorded litter for ' +
+          doeName(mating) +
+          ': ' +
+          litter.bornAlive +
+          ' born alive on ' +
+          formatDisplayDate(date) +
+          '.'
+      );
     });
-    if (kindleChore) {
-      kindleChore.done = true;
-      kindleChore.doneAt = date;
-      kindleChore.snoozedTo = null;
+  }
+
+  function bindAuth() {
+    var root = document.getElementById('app-root');
+    if (!root) return;
+
+    root.querySelectorAll('[data-auth="sample"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var result = Auth.loginSample(true);
+        state = result.state;
+        authView = AUTH_VIEWS.none;
+        authError = '';
+        activeTab = 'today';
+        setFlash(
+          'Opened the sample barn. Browse Today, Herd, Litters, and History — writes stay disabled until you create your own account.'
+        );
+      });
+    });
+
+    root.querySelectorAll('[data-auth="open-login"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        authView = AUTH_VIEWS.login;
+        authError = '';
+        flashMessage = '';
+        render();
+      });
+    });
+
+    root.querySelectorAll('[data-auth="open-signup"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        authView = AUTH_VIEWS.signup;
+        authError = '';
+        flashMessage = '';
+        render();
+      });
+    });
+
+    root.querySelectorAll('[data-auth="close"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        authView = AUTH_VIEWS.none;
+        authError = '';
+        render();
+      });
+    });
+
+    root.querySelectorAll('[data-auth="logout"]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var result = Auth.logout();
+        state = result.state;
+        authView = AUTH_VIEWS.none;
+        authError = '';
+        activeTab = 'today';
+        setFlash(
+          'Logged out. You are back on a guest herd on this device — add animals, then create a free account to keep them.'
+        );
+      });
+    });
+
+    var loginForm = document.getElementById('login-form');
+    if (loginForm) {
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var fd = new FormData(loginForm);
+        var result = Auth.login(
+          fd.get('email'),
+          fd.get('password'),
+          fd.get('remember') === 'on'
+        );
+        if (!result.ok) {
+          authError = result.error;
+          render();
+          return;
+        }
+        state = result.state;
+        authView = AUTH_VIEWS.none;
+        authError = '';
+        activeTab = 'today';
+        var modeLabel =
+          result.user.mode === 'sample' ? 'sample barn' : result.user.email;
+        setFlash('Signed in to ' + modeLabel + '. Your herd is loaded.');
+      });
     }
 
-    refreshOpenChoresForMating(matingId);
-    persist();
-    activeTab = 'litters';
-    setFlash(
-      'Recorded litter for ' +
-        doeName(mating) +
-        ': ' +
-        litter.bornAlive +
-        ' born alive on ' +
-        formatDisplayDate(date) +
-        '.'
-    );
+    var signupForm = document.getElementById('signup-form');
+    if (signupForm) {
+      signupForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        if (Auth.isSample()) {
+          // Leaving sample: signup should start from empty guest, not copy fixture
+          Auth.logout();
+          state = Auth.loadGuestHerd();
+        }
+        var fd = new FormData(signupForm);
+        var result = Auth.signup(
+          fd.get('email'),
+          fd.get('password'),
+          fd.get('name'),
+          state,
+          true
+        );
+        if (!result.ok) {
+          authError = result.error;
+          render();
+          return;
+        }
+        state = result.state;
+        authView = AUTH_VIEWS.none;
+        authError = '';
+        activeTab = 'today';
+        setFlash(
+          'Account created for ' +
+            result.user.email +
+            '. Your herd is saved on this device.'
+        );
+      });
+    }
   }
 
   function bind() {
     var root = document.getElementById('app-root');
     if (!root) return;
+
+    bindAuth();
 
     root.querySelectorAll('[data-tab]').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -703,45 +1143,41 @@
 
     root.querySelectorAll('[data-action="record-litter"]').forEach(function (btn) {
       btn.addEventListener('click', function () {
+        if (isReadOnly()) {
+          setFlash(Auth.SAMPLE_READ_ONLY_TOAST);
+          return;
+        }
         activeTab = 'litters';
         flashMessage = '';
         render();
-        var select = document.querySelector('#record-litter-form select[name="matingId"]');
+        var select = document.querySelector(
+          '#record-litter-form select[name="matingId"]'
+        );
         if (select) select.value = btn.getAttribute('data-mating');
-      });
-    });
-
-    root.querySelectorAll('[data-action="load-sample"]').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        if (
-          state.animals.length &&
-          !window.confirm(
-            'Replace the current herd, matings, litters, and chores with the sample herd?'
-          )
-        ) {
-          return;
-        }
-        state = Storage.sampleHerd();
-        persist();
-        activeTab = 'today';
-        setFlash('Sample herd loaded. Nest and kindle chores should appear on Today.');
       });
     });
 
     root.querySelectorAll('[data-action="clear-all"]').forEach(function (btn) {
       btn.addEventListener('click', function () {
+        if (isReadOnly()) {
+          setFlash(Auth.SAMPLE_READ_ONLY_TOAST);
+          return;
+        }
         if (
           !window.confirm(
-            'Clear every animal, mating, litter, and chore stored in this browser?'
+            'Clear every animal, mating, litter, and chore stored for this herd on this device?'
           )
         ) {
           return;
         }
-        Storage.clear();
-        state = Storage.emptyState();
-        persist();
+        var cleared = Auth.clearCurrentAccountData();
+        if (cleared && cleared.ok === false) {
+          setFlash(cleared.toast || Auth.SAMPLE_READ_ONLY_TOAST);
+          return;
+        }
+        state = Auth.loadActiveHerd();
         activeTab = 'today';
-        setFlash('Local data cleared. This planner is empty again.');
+        setFlash('Local herd data cleared for this account.');
       });
     });
 
@@ -749,19 +1185,22 @@
     if (animalForm) {
       animalForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        var fd = new FormData(animalForm);
-        var sex = String(fd.get('sex') || 'doe');
-        state.animals.push({
-          id: Storage.uid('animal'),
-          name: String(fd.get('name') || '').trim() || 'Unnamed',
-          sex: sex,
-          status: sex === 'grow-out' ? 'grow-out' : 'breeder',
-          breed: String(fd.get('breed') || '').trim(),
-          cage: String(fd.get('cage') || '').trim(),
-          notes: String(fd.get('notes') || '').trim(),
+        guardWrite(function () {
+          var fd = new FormData(animalForm);
+          var sex = String(fd.get('sex') || 'doe');
+          var name = String(fd.get('name') || '').trim() || 'Unnamed';
+          state.animals.push({
+            id: Storage.uid('animal'),
+            name: name,
+            sex: sex,
+            status: sex === 'grow-out' ? 'grow-out' : 'breeder',
+            breed: String(fd.get('breed') || '').trim(),
+            cage: String(fd.get('cage') || '').trim(),
+            notes: String(fd.get('notes') || '').trim(),
+          });
+          if (!persist()) return;
+          setFlash('Saved ' + name + ' to the herd.');
         });
-        persist();
-        setFlash('Saved ' + String(fd.get('name') || 'animal') + ' to the herd.');
       });
     }
 
@@ -769,26 +1208,28 @@
     if (matingForm) {
       matingForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        var fd = new FormData(matingForm);
-        var mating = {
-          id: Storage.uid('mating'),
-          doeId: String(fd.get('doeId')),
-          buckId: String(fd.get('buckId')),
-          date: String(fd.get('date') || Schedule.todayIso()),
-          notes: String(fd.get('notes') || '').trim(),
-          kindleDate: null,
-        };
-        state.matings.push(mating);
-        createMatingChores(mating);
-        persist();
-        activeTab = 'today';
-        setFlash(
-          'Mating saved for ' +
-            doeName(mating) +
-            ' × ' +
-            buckName(mating) +
-            '. Nest and kindle chores are on Today.'
-        );
+        guardWrite(function () {
+          var fd = new FormData(matingForm);
+          var mating = {
+            id: Storage.uid('mating'),
+            doeId: String(fd.get('doeId')),
+            buckId: String(fd.get('buckId')),
+            date: String(fd.get('date') || Schedule.todayIso()),
+            notes: String(fd.get('notes') || '').trim(),
+            kindleDate: null,
+          };
+          state.matings.push(mating);
+          createMatingChores(mating);
+          if (!persist()) return;
+          activeTab = 'today';
+          setFlash(
+            'Mating saved for ' +
+              doeName(mating) +
+              ' × ' +
+              buckName(mating) +
+              '. Nest and kindle chores are on Today.'
+          );
+        });
       });
     }
 
@@ -804,18 +1245,21 @@
     if (settingsForm) {
       settingsForm.addEventListener('submit', function (e) {
         e.preventDefault();
-        var fd = new FormData(settingsForm);
-        state.settings = {
-          nestOffsetDays: Number(fd.get('nestOffsetDays')) || 27,
-          kindleOffsetDays: Number(fd.get('kindleOffsetDays')) || 31,
-          weanDaysAfterKindle: Number(fd.get('weanDaysAfterKindle')) || 28,
-          processDaysAfterKindle: Number(fd.get('processDaysAfterKindle')) || 75,
-        };
-        state.matings.forEach(function (m) {
-          refreshOpenChoresForMating(m.id);
+        guardWrite(function () {
+          var fd = new FormData(settingsForm);
+          state.settings = {
+            nestOffsetDays: Number(fd.get('nestOffsetDays')) || 27,
+            kindleOffsetDays: Number(fd.get('kindleOffsetDays')) || 31,
+            weanDaysAfterKindle: Number(fd.get('weanDaysAfterKindle')) || 28,
+            processDaysAfterKindle:
+              Number(fd.get('processDaysAfterKindle')) || 75,
+          };
+          state.matings.forEach(function (m) {
+            refreshOpenChoresForMating(m.id);
+          });
+          if (!persist()) return;
+          setFlash('Schedule offsets saved. Open chores were recalculated.');
         });
-        persist();
-        setFlash('Schedule offsets saved. Open chores were recalculated.');
       });
     }
   }

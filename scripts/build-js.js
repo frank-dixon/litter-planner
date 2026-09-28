@@ -10,7 +10,13 @@ const root = path.join(__dirname, '..');
 const srcDir = path.join(root, 'src', 'js');
 const outDir = path.join(root, 'docs', 'js');
 
-const ENTRIES = ['storage.js', 'schedule.js', 'app.js'];
+const ENTRIES = [
+  'schedule.js',
+  'sample-fixture.js',
+  'storage.js',
+  'auth.js',
+  'app.js',
+];
 
 async function buildOne(file) {
   const entry = path.join(srcDir, file);
