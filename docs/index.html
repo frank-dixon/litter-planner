@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#F5F0E8" />
+  <meta
+    name="description"
+    content="Litter Planner — practical meat-rabbit nest, kindle, wean, and process dates. Local-only companion to Frank Dixon’s progeny colors tool."
+  />
+  <title>Litter Planner — Frank Dixon</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="./css/litter-planner.css" />
+</head>
+<body class="min-h-screen bg-paper text-ink font-sans antialiased">
+  <a
+    href="#main"
+    class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-teal focus:px-3 focus:py-2 focus:text-teal-on"
+  >Skip to planner</a>
+
+  <!-- Portfolio hub masthead -->
+  <header
+    class="sticky top-0 z-[60] border-b border-rule/70 bg-paper/92 backdrop-blur-[10px]"
+  >
+    <div
+      class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3 py-2.5 sm:px-4"
+    >
+      <a
+        class="font-sans text-[0.95rem] font-bold tracking-[-0.02em] text-ink no-underline"
+        href="https://frank-dixon.github.io/"
+      >Frank Dixon<span class="text-teal">.</span></a>
+      <nav aria-label="Frank Dixon site">
+        <ul class="m-0 flex list-none flex-wrap gap-x-[1.35rem] gap-y-[0.35rem] p-0">
+          <li>
+            <a
+              href="https://frank-dixon.github.io/#about"
+              class="text-[0.82rem] font-medium text-ink-muted no-underline hover:font-semibold hover:text-ink"
+            >About</a>
+          </li>
+          <li>
+            <a
+              href="https://frank-dixon.github.io/#work"
+              class="text-[0.82rem] font-medium text-ink-muted no-underline hover:font-semibold hover:text-ink"
+            >Work</a>
+          </li>
+          <li>
+            <a
+              href="https://frank-dixon.github.io/#projects"
+              class="text-[0.82rem] font-medium text-ink-muted no-underline hover:font-semibold hover:text-ink"
+            >Projects</a>
+          </li>
+          <li>
+            <a
+              href="https://frank-dixon.github.io/#contact"
+              class="text-[0.82rem] font-medium text-ink-muted no-underline hover:font-semibold hover:text-ink"
+            >Contact</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <!-- App header -->
+  <header class="border-b border-rule bg-paper-soft/80">
+    <div class="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4 px-3 py-6 sm:px-4">
+      <div class="min-w-0">
+        <p class="font-mono text-[0.68rem] font-medium uppercase tracking-[0.12em] text-teal">
+          Meat rabbit schedule
+        </p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+          Litter Planner
+        </h1>
+        <p class="mt-2 max-w-xl text-sm leading-relaxed text-ink-muted sm:text-base">
+          Turn one mating date into nest-box, kindling, wean, and process chores for a backyard meat herd. Everything stays in this browser.
+        </p>
+      </div>
+      <p class="text-sm text-ink-muted">
+        Sits beside
+        <a
+          class="font-medium text-teal underline-offset-2 hover:underline"
+          href="https://frank-dixon.github.io/rabbit/"
+        >Progeny colors</a>
+      </p>
+    </div>
+  </header>
+
+  <main id="main" class="mx-auto max-w-6xl px-3 py-8 sm:px-4">
+    <div id="app-root" class="min-h-[24rem]">
+      <p class="text-sm text-ink-muted">Loading the planner…</p>
+    </div>
+  </main>
+
+  <footer class="border-t border-rule bg-paper-soft/50">
+    <div class="mx-auto max-w-6xl px-3 py-6 text-sm text-ink-muted sm:px-4">
+      <p>
+        Litter Planner · local-only Phase 1 ·
+        <a class="text-teal hover:underline" href="https://frank-dixon.github.io/">Frank Dixon</a>
+      </p>
+    </div>
+  </footer>
+
+  <script src="./js/storage.js"></script>
+  <script src="./js/schedule.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
