@@ -12,7 +12,7 @@ module.exports = {
         ink: {
           DEFAULT: '#2F2A26',
           soft: '#4A443E',
-          muted: '#7A7268',
+          muted: '#665F57',
         },
         rule: {
           DEFAULT: '#D8D0C4',
@@ -33,20 +33,14 @@ module.exports = {
         },
       },
       fontFamily: {
-        sans: [
-          '"DM Sans"',
-          '"Helvetica Neue"',
-          'Helvetica',
-          'Arial',
-          'system-ui',
-          'sans-serif',
-        ],
-        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
+        display: ['Michroma', '"IBM Plex Sans"', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         paper: '0 12px 36px rgba(28, 25, 22, 0.07)',
         'paper-sm': '0 3px 12px rgba(28, 25, 22, 0.05)',
-        teal: '0 6px 16px rgba(11, 138, 143, 0.2)',
+        teal: '0 2px 8px rgba(11, 138, 143, 0.16)',
       },
       borderRadius: {
         paper: '0.75rem',

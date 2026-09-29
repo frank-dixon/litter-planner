@@ -350,7 +350,7 @@
       '<button type="button" data-auth="close" class="text-sm text-ink-muted hover:text-ink">Close</button></div>' +
       '<p class="mt-1 mb-4 text-sm leading-relaxed text-ink-muted">' +
       escapeHtml(herdHint) +
-      ' Accounts stay in this browser only (portfolio demo — not production security).</p>' +
+      ' Accounts live only in this browser and aren’t a secure login, so don’t reuse a real password.</p>' +
       err +
       '<form id="signup-form" class="grid gap-3 sm:grid-cols-2">' +
       '<label class="block text-sm text-ink-soft sm:col-span-2">Email<input type="email" name="email" required autocomplete="username" class="mt-1 w-full rounded-lg border border-rule bg-paper-soft px-3 py-2 text-ink" placeholder="you@example.com" /></label>' +
@@ -928,7 +928,7 @@
       ) +
       actions +
       '</form>' +
-      '<p class="mt-6 text-sm leading-relaxed text-ink-muted">Free accounts and guest herds stay in this browser on this device. Sample barn data is a built-in fixture and never saves. Pair this planner with <a class="text-teal font-medium underline-offset-2 hover:underline" href="https://frank-dixon.github.io/rabbit/">Progeny colors</a> when you want coat predictions for a planned cross.</p>' +
+      '<p class="mt-6 text-sm leading-relaxed text-ink-muted">Free accounts and guest herds stay in this browser on this device. Changes in the sample barn are never saved. Pair this planner with the <a class="text-teal font-medium underline-offset-2 hover:underline" href="https://frank-dixon.github.io/rabbit/">Rabbit Progeny Predictor</a> when you want coat predictions for a planned cross.</p>' +
       '</section>'
     );
   }

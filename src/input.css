@@ -1,3 +1,35 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Barn-daylight take on the hex-dial system: Plex type, thin linework,
+   one calm teal → spruce two-stop accent, a faint hex lattice in the header */
+@layer base {
+  :root {
+    --lp-a: #0b8a8f;
+    --lp-b: #2f5d8a;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--lp-a);
+    outline-offset: 2px;
+  }
+
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline-offset: 0;
+    border-color: var(--lp-a);
+  }
+}
+
+@layer components {
+  .lp-rule-accent {
+    height: 1px;
+    background: linear-gradient(90deg, var(--lp-a), var(--lp-b));
+  }
+
+  .lp-hex-lattice {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48.5' viewBox='0 0 28 48.5'%3E%3Cpath d='M14 0v8.1M14 48.5v-8.1M0 16.2l14-8.1 14 8.1v16.1l-14 8.1-14-8.1z' fill='none' stroke='%230b8a8f' stroke-opacity='.06' stroke-width='1'/%3E%3C/svg%3E");
+  }
+}

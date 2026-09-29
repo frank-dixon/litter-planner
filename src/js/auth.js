@@ -304,7 +304,7 @@
     if (pw.length < 4) {
       return {
         ok: false,
-        error: 'Choose a password with at least four characters for this portfolio demo.',
+        error: 'Choose a password with at least four characters.',
       };
     }
     var meta = sampleMeta();

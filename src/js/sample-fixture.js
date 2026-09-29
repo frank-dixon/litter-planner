@@ -122,7 +122,7 @@
       doeId: clover.id,
       buckId: cedar.id,
       date: mating1Date,
-      notes: 'Observed fall-off. Sample schedule so Today has nest work.',
+      notes: 'Observed fall-off. Nest box goes in this week.',
       kindleDate: null,
     };
 
